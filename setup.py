@@ -18,12 +18,12 @@ with open(path.join(here, 'requirements.txt')) as f:
 
 setup(
     name='robotframework-postgresqldb',
-    version='1.0.0',
+    version='1.0.1',
     description='Robot Framework Library For Working With PostgreSQL Database.',
     long_description=long_description,
     url='https://github.com/peterservice-rnd/robotframework-postgresqldb',
-    author='JSC PETER-SERVICE',
-    author_email='mf_aist_all@billing.ru',
+    author='Nexign',
+    author_email='mf_aist_all@nexign-systems.com',
     license='Apache License 2.0',
     classifiers=[
         'Development Status :: 5 - Production/Stable',
@@ -37,6 +37,6 @@ setup(
     ],
     keywords='testing testautomation robotframework autotest psycopg2 postgresql database',
     package_dir={'': 'src'},
-    py_modules=['PostgreSQL'],
+    py_modules=['PostgreSQLDB'],
     install_requires=requirements,
 )
