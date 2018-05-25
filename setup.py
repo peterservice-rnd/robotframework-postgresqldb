@@ -12,13 +12,9 @@ here = path.abspath(path.dirname(__file__))
 with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
-# Get install requires from requirements.txt
-with open(path.join(here, 'requirements.txt')) as f:
-    requirements = f.read().splitlines()
-
 setup(
     name='robotframework-postgresqldb',
-    version='1.0.1',
+    version='1.0.2',
     description='Robot Framework Library For Working With PostgreSQL Database.',
     long_description=long_description,
     url='https://github.com/peterservice-rnd/robotframework-postgresqldb',
@@ -38,5 +34,13 @@ setup(
     keywords='testing testautomation robotframework autotest psycopg2 postgresql database',
     package_dir={'': 'src'},
     py_modules=['PostgreSQLDB'],
-    install_requires=requirements,
+    install_requires=[
+        "robotframework",
+        "psycopg2"
+    ],
+    extras_require={
+        ':python_version<="2.7"': [
+            'future>=0.16.0'
+        ],
+    }
 )
