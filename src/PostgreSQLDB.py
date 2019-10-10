@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 
 from html import escape
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import psycopg2
+from psycopg2.extensions import connection as db_connection, cursor
 from robot.api import logger
 from robot.utils import ConnectionCache
 
@@ -17,13 +19,28 @@ class PostgreSQLDB(object):
     """
     ROBOT_LIBRARY_SCOPE = 'GLOBAL'
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Library initialization.
         Robot Framework ConnectionCache() class is prepared for working with concurrent connections."""
-        self._connection = None
+        self._connection: Optional[db_connection] = None
         self._cache = ConnectionCache()
 
-    def connect_to_postgresql(self, dbname, dbusername, dbpassword, dbhost=None, dbport=None, alias=None):
+    @property
+    def connection(self) -> db_connection:
+        """Get current connection to Postgres database.
+
+        *Raises:*\n
+            RuntimeError: if there isn't any open connection.
+
+        *Returns:*\n
+            Current connection to the database.
+        """
+        if self._connection is None:
+            raise RuntimeError('There is no open connection to PostgreSQL database.')
+        return self._connection
+
+    def connect_to_postgresql(self, dbname: str, dbusername: str, dbpassword: str, dbhost: str = None,
+                              dbport: str = None, alias: str = None) -> db_connection:
         """
         Connection to Postgres DB.
 
@@ -31,9 +48,9 @@ class PostgreSQLDB(object):
             _dbname_ - database name;\n
             _dbusername_ - username for db connection;\n
             _dbpassword_ - password for db connection;\n
-            _alias_ - connection alias, used for switching between open connections;\n
             _dbhost_ - host for db connection, default is localhost;\n
             _dbport_ - port for db connection, default is 5432;\n
+            _alias_ - connection alias, used for switching between open connections.
 
         *Returns:*\n
             Returns the index of the new connection. The connection is set as active.
@@ -42,15 +59,16 @@ class PostgreSQLDB(object):
             | Connect To Postgresql  |  postgres  |  postgres  |  password | localhost | 5332  | None |
         """
         try:
-            logger.debug('Connecting using : dbhost=%s, dbport=%s, dbname=%s, dbusername=%s, dbpassword=%s, alias=%s ' %
-                         (dbhost or "localhost", dbport or "5432", dbname, dbusername, dbpassword, alias))
+            logger.debug(f'Connecting using : dbhost={dbhost or "localhost"}, dbport={dbport or "5432"}, '
+                         f'dbname={dbname}, dbusername={dbusername}, dbpassword={dbpassword}, alias={alias}')
+
             self._connection = psycopg2.connect(host=dbhost, port=dbport, dbname=dbname, user=dbusername,
                                                 password=dbpassword)
             return self._cache.register(self._connection, alias)
         except psycopg2.Error as err:
             raise Exception("Logon to PostgreSQL  Error:", str(err))
 
-    def disconnect_from_postgresql(self):
+    def disconnect_from_postgresql(self) -> None:
         """
         Close active PostgreSQL connection.
         You will have to manually open or switch to a new connection.
@@ -61,10 +79,10 @@ class PostgreSQLDB(object):
             | Connect To Postgresql  |  postgres  |  postgres  |  password |
             | Disconnect From Postgresql |
         """
-        self._connection.close()
+        self.connection.close()
         self._cache._current = self._cache._no_current
 
-    def close_all_postgresql_connections(self):
+    def close_all_postgresql_connections(self) -> None:
         """
         Close all PostgreSQL connections that were opened.
         After calling this keyword connection index returned by opening new connections [#Connect To Postgresql |Connect To Postgresql],
@@ -81,7 +99,7 @@ class PostgreSQLDB(object):
         """
         self._connection = self._cache.close_all()
 
-    def switch_postgresql_connection(self, index_or_alias):
+    def switch_postgresql_connection(self, index_or_alias: Union[int, str]) -> int:
         """
         Switch to another existing PostgreSQL connection using its index or alias.\n
 
@@ -131,7 +149,7 @@ class PostgreSQLDB(object):
         return old_index
 
     @staticmethod
-    def wrap_into_html_details(statement, summary):
+    def wrap_into_html_details(statement: str, summary: str) -> str:
         """Format statement for html logging.
 
         *Args:*\n
@@ -142,10 +160,10 @@ class PostgreSQLDB(object):
             Formatted statement.
         """
         statement_html = escape(statement)
-        data = u'<details><summary>{}</summary><p>{}</p></details>'.format(summary, statement_html)
+        data = f'<details><summary>{summary}</summary><p>{statement_html}</p></details>'
         return data
 
-    def _execute_sql(self, cursor, statement, params):
+    def _execute_sql(self, cursor: cursor, statement: str, params: Dict[str, Any]) -> cursor:
         """ Execute SQL query on Postgres DB using active connection.
 
         *Args*:\n
@@ -157,11 +175,11 @@ class PostgreSQLDB(object):
             Query results.
         """
         statement_with_params = self._replace_parameters_in_statement(statement, params)
-        data = self.wrap_into_html_details(statement=statement_with_params, summary='Running PL\PGSQL statement')
+        data = self.wrap_into_html_details(statement=statement_with_params, summary='Running PL/PGSQL statement')
         logger.info(data, html=True)
         return cursor.execute(statement, params)
 
-    def _replace_parameters_in_statement(self, statement, params):
+    def _replace_parameters_in_statement(self, statement: str, params: Dict[str, Any]) -> str:
         """Update SQL query parameters, if any exist, with their values for logging purposes.
 
         *Args*:\n
@@ -173,26 +191,26 @@ class PostgreSQLDB(object):
         """
         for key, value in params.items():
             if isinstance(value, (int, float)):
-                statement = statement.replace(':{}'.format(key), str(value))
+                statement = statement.replace(f':{key}', str(value))
             else:
-                statement = statement.replace(':{}'.format(key), "'{}'".format(value))
+                statement = statement.replace(f':{key}', f"'{value}'")
         return statement
 
-    def execute_plpgsql_block(self, plpgsqlstatement, **params):
+    def execute_plpgsql_block(self, plpgsqlstatement: str, **params: Any) -> None:
         """
-        PL\PGSQL block execution.
+        PL/PGSQL block execution.
         For parametrized SQL queries please consider psycopg2 guide on the subject:
         http://initd.org/psycopg/docs/usage.html#passing-parameters-to-sql-queries
 
         *Args:*\n
-            _plpgsqlstatement_ - PL\PGSQL block;\n
-            _params_ - PL\PGSQL block parameters;\n
+            _plpgsqlstatement_ - PL/PGSQL block;\n
+            _params_ - PL/PGSQL block parameters;\n
 
         *Raises:*\n
             PostgreSQL error in form of psycopg2 exception.
 
         *Returns:*\n
-            PL\PGSQL block execution result.
+            PL/PGSQL block execution result.
 
         *Example:*\n
             | *Settings* | *Value* |
@@ -231,28 +249,28 @@ class PostgreSQLDB(object):
         """
         cursor = None
         try:
-            cursor = self._connection.cursor()
+            cursor = self.connection.cursor()
             self._execute_sql(cursor, plpgsqlstatement, params)
-            self._connection.commit()
+            self.connection.commit()
         finally:
             if cursor:
-                self._connection.rollback()
+                self.connection.rollback()
 
-    def execute_plpgsql_script(self, file_path, **params):
+    def execute_plpgsql_script(self, file_path: str, **params: Any) -> None:
         """
-        Execution of PL\PGSQL from file.
+        Execution of PL/PGSQL from file.
         For parametrized SQL queries please consider psycopg2 guide on the subject:
         http://initd.org/psycopg/docs/usage.html#passing-parameters-to-sql-queries
 
         *Args:*\n
-            _file_path_ - path to PL\PGSQL script file;\n
-            _params_ - PL\PGSQL code parameters;\n
+            _file_path_ - path to PL/PGSQL script file;\n
+            _params_ - PL/PGSQL code parameters;\n
 
         *Raises:*\n
             PostgreSQL error in form of psycopg2 exception.
 
         *Returns:*\n
-            PL\PGSQL script execution result.
+            PL/PGSQL script execution result.
 
         *Example:*\n
             |  Execute Plpgsql Script  |  ${CURDIR}${/}plpgsql_script.sql |
@@ -262,21 +280,21 @@ class PostgreSQLDB(object):
             data = script.read()
             self.execute_plpgsql_block(data, **params)
 
-    def execute_sql_string(self, plpgsqlstatement, **params):
+    def execute_sql_string(self, plpgsqlstatement: str, **params: Any) -> List[Tuple[Any, ...]]:
         """
-        Execute PL\PGSQL string.
+        Execute PL/PGSQL string.
         For parametrized SQL queries please consider psycopg2 guide on the subject:
         http://initd.org/psycopg/docs/usage.html#passing-parameters-to-sql-queries
 
         *Args:*\n
-            _plpgsqlstatement_ - PL\PGSQL string;\n
-            _params_ - PL\PGSQL string parameters;\n
+            _plpgsqlstatement_ - PL/PGSQL string;\n
+            _params_ - PL/PGSQL string parameters;\n
 
         *Raises:*\n
             PostgreSQL error in form of psycopg2 exception.
 
         *Returns:*\n
-            PL\PGSQL string execution result.
+            PL/PGSQL string execution result.
 
         *Example:*\n
             | @{query}= | Execute Sql String | SELECT CURRENT_DATE, CURRENT_DATE+1 |
@@ -289,24 +307,24 @@ class PostgreSQLDB(object):
         """
         cursor = None
         try:
-            cursor = self._connection.cursor()
+            cursor = self.connection.cursor()
             self._execute_sql(cursor, plpgsqlstatement, params)
             query_result = cursor.fetchall()
             self.result_logger(query_result)
             return query_result
         finally:
             if cursor:
-                self._connection.rollback()
+                self.connection.rollback()
 
-    def execute_sql_string_mapped(self, plpgsqlstatement, **params):
+    def execute_sql_string_mapped(self, plpgsqlstatement: str, **params: Any) -> List[Dict[str, Any]]:
         """SQL query execution where each result row is mapped as a dict with column names as keys.
 
         For parametrized SQL queries please consider psycopg2 guide on the subject:
         http://initd.org/psycopg/docs/usage.html#passing-parameters-to-sql-queries
 
         *Args:*\n
-            _plpgsqlstatement_ - PL\PGSQL string;\n
-            _params_ - PL\PGSQL string parameters;\n
+            _plpgsqlstatement_ - PL/PGSQL string;\n
+            _params_ - PL/PGSQL string parameters;\n
 
         *Returns:*\n
             A list of dictionaries where column names are mapped as keys
@@ -322,7 +340,7 @@ class PostgreSQLDB(object):
         """
         cursor = None
         try:
-            cursor = self._connection.cursor()
+            cursor = self.connection.cursor()
             self._execute_sql(cursor, plpgsqlstatement, params)
             col_name = tuple(i[0] for i in cursor.description)
             query_result = [dict(zip(col_name, row)) for row in cursor]
@@ -330,9 +348,9 @@ class PostgreSQLDB(object):
             return query_result
         finally:
             if cursor:
-                self._connection.rollback()
+                self.connection.rollback()
 
-    def result_logger(self, query_result, result_amount=10):
+    def result_logger(self, query_result: List[Any], result_amount: int = 10) -> None:
         """Log first n results of the query results
 
         *Args:*\n
